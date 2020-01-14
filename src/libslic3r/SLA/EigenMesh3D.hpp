@@ -70,9 +70,6 @@ public:
         inline bool is_valid() const { return m_mesh != nullptr; }
         inline bool is_hit() const { return !std::isinf(m_t); }
 
-        // Hit_result can decay into a double as the hit distance.
-        inline operator double() const { return distance(); }
-
         inline const Vec3d& normal() const {
             assert(is_valid());
             return m_normal;

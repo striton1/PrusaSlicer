@@ -278,7 +278,11 @@ EigenMesh3D::hit_result SupportTreeBuildsteps::pinhead_mesh_intersect(
                hits[i] = q;
         });
 
-    auto mit = std::min_element(hits.begin(), hits.end());
+    using Hit = EigenMesh3D::hit_result;
+    auto mit = std::min_element(hits.begin(), hits.end(), 
+                                [](const Hit &h1, const Hit &h2) { 
+        return h1.distance() < h2.distance(); 
+    });
     
     return *mit;
 }
@@ -347,7 +351,11 @@ EigenMesh3D::hit_result SupportTreeBuildsteps::bridge_mesh_intersect(
             } else hits[i] = hr;
         });
     
-    auto mit = std::min_element(hits.begin(), hits.end());
+    using Hit = EigenMesh3D::hit_result;
+    auto mit = std::min_element(hits.begin(), hits.end(), 
+                                [](const Hit &h1, const Hit &h2) { 
+        return h1.distance() < h2.distance(); 
+    });
     
     return *mit;
 }
@@ -419,7 +427,7 @@ bool SupportTreeBuildsteps::interconnect(const Pillar &pillar,
     
     // TODO: This is a workaround to not have a faulty last bridge
     while(ej(Z) >= eupper(Z) /*endz*/) {
-        if(bridge_mesh_intersect(sj, dirv(sj, ej), pillar.r) >= bridge_distance)
+        if(bridge_mesh_distance(sj, dirv(sj, ej), pillar.r) >= bridge_distance)
         {
             m_builder.add_crossbridge(sj, ej, pillar.r);
             was_connected = true;
@@ -430,7 +438,7 @@ bool SupportTreeBuildsteps::interconnect(const Pillar &pillar,
             Vec3d sjback(ej(X), ej(Y), sj(Z));
             Vec3d ejback(sj(X), sj(Y), ej(Z));
             if (sjback(Z) <= slower(Z) && ejback(Z) >= eupper(Z) &&
-                bridge_mesh_intersect(sjback, dirv(sjback, ejback),
+                bridge_mesh_distance(sjback, dirv(sjback, ejback),
                                       pillar.r) >= bridge_distance) {
                 // need to check collision for the cross stick
                 m_builder.add_crossbridge(sjback, ejback, pillar.r);
@@ -487,7 +495,7 @@ bool SupportTreeBuildsteps::connect_to_nearpillar(const Head &head,
             bridgestart(Z) -= zdiff;
             touchjp(Z) = Zdown;
             
-            double t = bridge_mesh_intersect(headjp, {0,0,-1}, r);
+            double t = bridge_mesh_distance(headjp, DOWN, r);
             
             // We can't insert a pillar under the source head to connect
             // with the nearby pillar's starting junction
@@ -505,8 +513,7 @@ bool SupportTreeBuildsteps::connect_to_nearpillar(const Head &head,
     double minz = m_builder.ground_level + 2 * m_cfg.head_width_mm;
     if(bridgeend(Z) < minz) return false;
     
-    double t = bridge_mesh_intersect(bridgestart,
-                                     dirv(bridgestart, bridgeend), r);
+    double t = bridge_mesh_distance(bridgestart, dirv(bridgestart, bridgeend), r);
     
     // Cannot insert the bridge. (further search might not worth the hassle)
     if(t < distance(bridgestart, bridgeend)) return false;
@@ -633,7 +640,7 @@ void SupportTreeBuildsteps::create_ground_pillar(const Vec3d &jp,
         };
         
         // We have to check if the bridge is feasible.
-        if (bridge_mesh_intersect(jp, dir, radius) < (endp - jp).norm())
+        if (bridge_mesh_distance(jp, dir, radius) < (endp - jp).norm())
             abort_in_shame();
         else {
             // If the new endpoint is below ground, do not make a pillar
@@ -764,7 +771,7 @@ void SupportTreeBuildsteps::filter()
                     {
                         auto dir = spheric_to_dir(plr, azm).normalized();
                         
-                        double score = pinhead_mesh_intersect(
+                        double score = pinhead_mesh_distance(
                             hp, dir, pin_r, m_cfg.head_back_radius_mm, w);
                         
                         return score;
@@ -950,11 +957,11 @@ bool SupportTreeBuildsteps::connect_to_ground(Head &head, const Vec3d &dir)
 {
     auto hjp = head.junction_point();
     double r = head.r_back_mm;
-    double t = bridge_mesh_intersect(hjp, dir, head.r_back_mm);
+    double t = bridge_mesh_distance(hjp, dir, head.r_back_mm);
     double d = 0, tdown = 0;
     t = std::min(t, m_cfg.max_bridge_length_mm);
 
-    while (d < t && !std::isinf(tdown = bridge_mesh_intersect(hjp + d * dir, DOWN, r)))
+    while (d < t && !std::isinf(tdown = bridge_mesh_distance(hjp + d * dir, DOWN, r)))
         d += r;
     
     if(!std::isinf(tdown)) return false;
@@ -989,7 +996,7 @@ bool SupportTreeBuildsteps::connect_to_ground(Head &head)
     auto oresult = solver.optimize_max(
         [this, hjp, r_back](double plr, double azm) {
             Vec3d n = spheric_to_dir(plr, azm).normalized();
-            return bridge_mesh_intersect(hjp, n, r_back);
+            return bridge_mesh_distance(hjp, n, r_back);
         },
         initvals(polar, azimuth),  // let's start with what we have
         bound(3*PI/4, PI),  // Must not exceed the slope limit
@@ -1259,9 +1266,8 @@ void SupportTreeBuildsteps::interconnect_pillars()
                     m_pillar_index.insert(pp.endpoint(), unsigned(pp.id));
 
                     m_builder.add_junction(s, pillar().r);
-                    double t = bridge_mesh_intersect(pillarsp,
-                                                     dirv(pillarsp, s),
-                                                     pillar().r);
+                    double t = bridge_mesh_distance(pillarsp, dirv(pillarsp, s),
+                                                    pillar().r);
                     if (distance(pillarsp, s) < t)
                         m_builder.add_bridge(pillarsp, s, pillar().r);
 
@@ -1312,8 +1318,8 @@ void SupportTreeBuildsteps::routing_headless()
         Vec3d sj = sp + R * n;              // stick start point
         
         // This is only for checking
-        double idist = bridge_mesh_intersect(sph, DOWN, R, true);
-        double realdist = ray_mesh_intersect(sj, DOWN);
+        double idist = bridge_mesh_distance(sph, DOWN, R, true);
+        double realdist = ray_mesh_intersect(sj, DOWN).distance();
         double dist = realdist;
         
         if (std::isinf(dist)) dist = sph(Z) - m_builder.ground_level;
