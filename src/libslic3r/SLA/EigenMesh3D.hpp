@@ -30,10 +30,14 @@ class EigenMesh3D {
 
 public:
     
-    EigenMesh3D(const TriangleMesh&);
+    explicit EigenMesh3D(const TriangleMesh&);
+    explicit EigenMesh3D(const Contour3D &other);
+    
     EigenMesh3D(const EigenMesh3D& other);
-    EigenMesh3D(const Contour3D &other);
     EigenMesh3D& operator=(const EigenMesh3D&);
+    
+    EigenMesh3D(EigenMesh3D &&other);
+    EigenMesh3D& operator=(EigenMesh3D &&other);
     
     ~EigenMesh3D();
     

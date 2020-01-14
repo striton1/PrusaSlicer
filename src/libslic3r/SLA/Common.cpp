@@ -262,6 +262,10 @@ EigenMesh3D &EigenMesh3D::operator=(const EigenMesh3D &other)
     m_aabb.reset(new AABBImpl(*other.m_aabb)); return *this;
 }
 
+EigenMesh3D &EigenMesh3D::operator=(EigenMesh3D &&other) = default;
+
+EigenMesh3D::EigenMesh3D(EigenMesh3D &&other) = default;
+
 EigenMesh3D::hit_result
 EigenMesh3D::query_ray_hit(const Vec3d &s, const Vec3d &dir) const
 {
