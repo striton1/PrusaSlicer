@@ -12,6 +12,10 @@ namespace sla {
 
 struct Contour3D;
 
+void to_igl_mesh(const TriangleMesh &mesh, Eigen::MatrixXd &V, Eigen::MatrixXi &F);
+void simplify_mesh(Eigen::MatrixXd &V, Eigen::MatrixXi &F, double eps);
+void to_triangle_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, TriangleMesh &);
+
 /// An index-triangle structure for libIGL functions. Also serves as an
 /// alternative (raw) input format for the SLASupportTree.
 //  Implemented in libslic3r/SLA/Common.cpp

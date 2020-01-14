@@ -26,6 +26,7 @@
 #include <igl/ray_mesh_intersect.h>
 #include <igl/point_mesh_squared_distance.h>
 #include <igl/remove_duplicate_vertices.h>
+#include <igl/collapse_small_triangles.h>
 #include <igl/signed_distance.h>
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -194,16 +195,11 @@ public:
 #endif /* SLIC3R_SLA_NEEDS_WINDTREE */
 };
 
-EigenMesh3D::EigenMesh3D(const TriangleMesh& tmesh): m_aabb(new AABBImpl()) {
-    static const double dEPS = 1e-6;
-    
+static const constexpr double MESH_EPS = 1e-6;
+
+void to_igl_mesh(const TriangleMesh &tmesh, Eigen::MatrixXd &V, Eigen::MatrixXi &F)
+{
     const stl_file& stl = tmesh.stl;
-    
-    auto&& bb = tmesh.bounding_box();
-    m_ground_level += bb.min(Z);
-    
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
     
     V.resize(3*stl.stats.number_of_facets, 3);
     F.resize(stl.stats.number_of_facets, 3);
@@ -217,9 +213,44 @@ EigenMesh3D::EigenMesh3D(const TriangleMesh& tmesh): m_aabb(new AABBImpl()) {
         F(i, 2) = int(3*i+2);
     }
     
-    // We will convert this to a proper 3d mesh with no duplicate points.
-    Eigen::VectorXi SVI, SVJ;
-    igl::remove_duplicate_vertices(V, F, dEPS, m_V, SVI, SVJ, m_F);
+    if (!tmesh.has_shared_vertices())
+    {
+        Eigen::MatrixXd rV;
+        Eigen::MatrixXi rF;
+        // We will convert this to a proper 3d mesh with no duplicate points.
+        Eigen::VectorXi SVI, SVJ;
+        igl::remove_duplicate_vertices(V, F, MESH_EPS, rV, SVI, SVJ, rF);
+        V = std::move(rV);
+        F = std::move(rF);
+    }
+}
+
+void to_triangle_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, TriangleMesh &out)
+{
+    Pointf3s points(size_t(V.rows())); 
+    std::vector<Vec3crd> facets(size_t(F.rows()));
+    
+    for (Eigen::Index i = 0; i < V.rows(); ++i)
+        points[size_t(i)] = V.row(i);
+    
+    for (Eigen::Index i = 0; i < F.rows(); ++i)
+        facets[size_t(i)] = F.row(i);
+    
+    out = {points, facets};
+}
+
+void simplify_mesh(Eigen::MatrixXd &V, Eigen::MatrixXi &F, double eps)
+{
+    Eigen::MatrixXi FF;
+    igl::collapse_small_triangles(V, F, eps, FF);
+    F = std::move(FF);
+}
+
+EigenMesh3D::EigenMesh3D(const TriangleMesh& tmesh): m_aabb(new AABBImpl()) {
+    auto&& bb = tmesh.bounding_box();
+    m_ground_level += bb.min(Z);
+    
+    to_igl_mesh(tmesh, m_V, m_F);
     
     // Build the AABB accelaration tree
     m_aabb->init(m_V, m_F);

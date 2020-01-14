@@ -36,7 +36,12 @@ TEST_CASE("Negative 3D offset should produce smaller object.", "[Hollowing]")
     
     std::cout << "Elapsed processing time: " << bench.getElapsedSec() << std::endl;
     
-    if (out_mesh_ptr) in_mesh.merge(*out_mesh_ptr);
-    in_mesh.require_shared_vertices();
-    in_mesh.WriteOBJFile("merged_out.obj");
+//    if (out_mesh_ptr) in_mesh.merge(*out_mesh_ptr);
+//    in_mesh.require_shared_vertices();
+//    in_mesh.WriteOBJFile("merged_out.obj");
+    
+    if (out_mesh_ptr && !out_mesh_ptr->empty()) { 
+        out_mesh_ptr->require_shared_vertices();
+        out_mesh_ptr->WriteOBJFile("interior.obj");
+    }
 }

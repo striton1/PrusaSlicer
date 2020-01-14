@@ -34,7 +34,7 @@ remove_cvref_t<Mesh> _grid_to_mesh(const openvdb::FloatGrid &grid,
                                    double                    isosurf,
                                    double                    adapt);
 
-template<>
+template<> inline 
 TriangleMesh _grid_to_mesh<TriangleMesh>(const openvdb::FloatGrid &grid,
                                    double                    isosurf,
                                    double                    adapt)
@@ -42,7 +42,7 @@ TriangleMesh _grid_to_mesh<TriangleMesh>(const openvdb::FloatGrid &grid,
     return grid_to_mesh(grid, isosurf, adapt);
 }
 
-template<>
+template<> inline 
 Contour3D _grid_to_mesh<Contour3D>(const openvdb::FloatGrid &grid,
                                    double                    isosurf,
                                    double                    adapt)
@@ -117,9 +117,20 @@ std::unique_ptr<TriangleMesh> generate_interior(const TriangleMesh &   mesh,
     //
     // max 8x upscale, min is native voxel size
     auto voxel_scale = (1.0 + MAX_OVERSAMPL * hc.quality);
-    return std::make_unique<TriangleMesh>(
+    auto m = std::make_unique<TriangleMesh>(
         _generate_interior(mesh, ctl, hc.min_thickness, voxel_scale,
                            hc.closing_distance));
+    
+    if (!m) return m;
+    
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+    to_igl_mesh(*m, V, F);
+//    double eps = 1. / voxel_scale;
+//    simplify_mesh(V, F, eps * eps);
+    to_triangle_mesh(V, F, *m);
+    
+    return m;
 }
 
 Contour3D DrainHole::to_mesh() const
