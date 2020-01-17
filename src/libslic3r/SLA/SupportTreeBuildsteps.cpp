@@ -284,7 +284,7 @@ EigenMesh3D::hit_result SupportTreeBuildsteps::pinhead_mesh_intersect(
        auto  q = m.query_ray_hit(ps + sd * n, n);
     
        if (q.is_inside()) { // the hit is inside the model
-           if (q.distance() > rings.rpin + sd) {
+           if (q.distance() > rings.rpin) {
                // If we are inside the model and the hit
                // distance is bigger than our pin circle
                // diameter, it probably indicates that the
