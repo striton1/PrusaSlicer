@@ -9,6 +9,8 @@
 
 #include <libnest2d/tools/benchmark.h>
 
+#include <libslic3r/SimplifyMesh.hpp>
+
 #if defined(WIN32) || defined(_WIN32)
 #define PATH_SEPARATOR R"(\)"
 #else
@@ -22,6 +24,7 @@ static Slic3r::TriangleMesh load_model(const std::string &obj_filename)
     Slic3r::load_obj(fpath.c_str(), &mesh);
     return mesh;
 }
+
 
 TEST_CASE("Negative 3D offset should produce smaller object.", "[Hollowing]")
 {
@@ -40,3 +43,31 @@ TEST_CASE("Negative 3D offset should produce smaller object.", "[Hollowing]")
     in_mesh.require_shared_vertices();
     in_mesh.WriteOBJFile("merged_out.obj");
 }
+
+TEST_CASE("Simplify hollowed interior", "[Hollowing_simplify]")
+{
+    Slic3r::TriangleMesh in_mesh = load_model("20mm_cube.obj");
+    Benchmark bench;
+    bench.start();
+    
+    std::unique_ptr<Slic3r::TriangleMesh> out_mesh_ptr =
+        Slic3r::sla::generate_interior(in_mesh);
+    
+    out_mesh_ptr->require_shared_vertices();
+    out_mesh_ptr->WriteOBJFile("interior_tmp.obj");
+//    Simplify::load_obj("interior_tmp.obj");
+//    Simplify::simplify_mesh_lossless();
+//    Simplify::write_obj("interior_tmp.obj");
+    
+    bench.stop();
+    
+    std::cout << "Elapsed processing time: " << bench.getElapsedSec() << std::endl;
+    
+//    out_mesh_ptr->clear();
+//    Slic3r::load_obj("interior_tmp.obj", out_mesh_ptr.get());
+    
+    if (out_mesh_ptr) in_mesh.merge(*out_mesh_ptr);
+    in_mesh.require_shared_vertices();
+    in_mesh.WriteOBJFile("merged_out.obj");
+}
+
