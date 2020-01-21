@@ -56,7 +56,7 @@ template<class T, class O = T>
 using ArithmeticOnly = enable_if_t<std::is_arithmetic<T>::value, O>;
 
 template<class T> FloatingOnly<T, bool> is_approx(T val, T ref) { return std::abs(val - ref) < 1e-8; }
-template<class T> IntegerOnly<T, bool>  is_approx(T val, T ref) { val == ref; }
+template<class T> IntegerOnly <T, bool> is_approx(T val, T ref) { val == ref; }
 
 template<class T, size_t N = 10> class SymetricMatrix {
 public:
@@ -195,7 +195,10 @@ template<class Mesh> class SimplifiableMesh {
         SymMat q;
         explicit VertexInfo(size_t vi): idx(vi) {}
     };
-
+    
+    struct Ref { size_t face; size_t vertex; };
+    
+    std::vector<Ref> m_refs;
     std::vector<FaceInfo> m_faceinfo;
     std::vector<VertexInfo> m_vertexinfo;
     
@@ -215,16 +218,16 @@ template<class Mesh> class SimplifiableMesh {
         return mesh_traits<Mesh>::vertex(m_mesh, vi);
     }
     
-    inline std::array<size_t, 3> triangle(size_t fi) const
-    {
-        return mesh_traits<Mesh>::triangle(m_mesh, fi);
-    }
-
     inline Vertex vertex(const VertexInfo &vinf) const
     {
         return vertex(vinf.idx);
     }
-
+    
+    inline std::array<size_t, 3> triangle(size_t fi) const
+    {
+        return mesh_traits<Mesh>::triangle(m_mesh, fi);
+    }
+    
     inline std::array<size_t, 3> triangle(const FaceInfo &finf) const
     {
         return triangle(finf.idx);
@@ -362,10 +365,17 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
 {
     if (iteration > 0) compact_faces();
     
+    assert(mesh_vcount() == vcount());
+        
+    //
+    // Init Quadrics by Plane & Edge Errors
+    //
+    // required at the beginning ( iteration == 0 )
+    // recomputing during the simplification is not required,
+    // but mostly improves the result for closed meshes
+    //
     if (iteration == 0) {
-        
-        assert(mesh_vcount() == vcount());
-        
+                
         for (VertexInfo &vinf : m_vertexinfo) vinf.q = SymMat{};
         for (FaceInfo   &finf : m_faceinfo) {
             std::array<size_t, 3> t = triangle(finf);
@@ -381,8 +391,6 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
         }
     }
     
-    
-
     //
     // Init Quadrics by Plane & Edge Errors
     //
@@ -425,15 +433,22 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
 //    }
     
     
-    
-    
-    // TODO::::::
+    for (FaceInfo &fi : m_faceinfo)
+        for (size_t vidx : triangle(fi)) m_vertexinfo[vidx].tcount++;
     
 //    loopi(0,triangles.size())
 //    {
 //        Triangle &t=triangles[i];
 //        loopj(0,3) vertices[t.v[j]].tcount++;
 //    }
+    
+    int tstart = 0;
+    for (VertexInfo &vi : m_vertexinfo) {
+        vi.tstart = tstart;
+        tstart += vi.tcount;
+        vi.tcount = 0;
+    }
+
 //    int tstart=0;
 //    loopi(0,vertices.size())
 //    {
@@ -442,6 +457,20 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
 //        tstart+=v.tcount;
 //        v.tcount=0;
 //    }
+    
+    // Write References
+    m_refs.resize(m_faceinfo.size() * 3);
+    for (size_t i = 0; i < m_faceinfo.size(); ++i) {
+        const FaceInfo &fi = m_faceinfo[i];
+        std::array<size_t, 3> t = triangle(fi);
+        for (size_t j = 0; j < 3; ++j) {
+            VertexInfo &vi = m_vertexinfo[t[j]];
+            Ref &ref = m_refs[vi.tstart + vi.tcount];
+            ref.face = i;
+            ref.vertex = j;
+            vi.tcount++;
+        }
+    }
     
 //    // Write References
 //    refs.resize(triangles.size()*3);
