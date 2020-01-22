@@ -186,14 +186,15 @@ template<class Mesh> class SimplifiableMesh {
         double err[4] = {0.};
         bool   deleted = false, dirty = false;
         Vertex n;
-        explicit FaceInfo(size_t fi): idx(fi) {}
+        explicit FaceInfo(size_t id): idx(id) {}
     };
 
     struct VertexInfo {
         size_t idx;
-        int    tstart, tcount, border;
+        int    tstart = 0, tcount = 0;
+        bool border = false;
         SymMat q;
-        explicit VertexInfo(size_t vi): idx(vi) {}
+        explicit VertexInfo(size_t id): idx(id) {}
     };
     
     struct Ref { size_t face; size_t vertex; };
@@ -391,56 +392,12 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
         }
     }
     
-    //
-    // Init Quadrics by Plane & Edge Errors
-    //
-    // required at the beginning ( iteration == 0 )
-    // recomputing during the simplification is not required,
-    // but mostly improves the result for closed meshes
-    //
-//    if( iteration == 0 )
-//    {
-//        loopi(0,vertices.size())
-//                vertices[i].q=SymetricMatrix(0.0);
-        
-//        loopi(0,triangles.size())
-//        {
-//            Triangle &t=triangles[i];
-//            vec3f n,p[3];
-//            loopj(0,3) p[j]=vertices[t.v[j]].p;
-//            n.cross(p[1]-p[0],p[2]-p[0]);
-//            n.normalize();
-//            t.n=n;
-//            loopj(0,3) vertices[t.v[j]].q =
-//                    vertices[t.v[j]].q+SymetricMatrix(n.x,n.y,n.z,-n.dot(p[0]));
-//        }
-//        loopi(0,triangles.size())
-//        {
-//            // Calc Edge Error
-//            Triangle &t=triangles[i];vec3f p;
-//            loopj(0,3) t.err[j]=calculate_error(t.v[j],t.v[(j+1)%3],p);
-//            t.err[3]=min(t.err[0],min(t.err[1],t.err[2]));
-//        }
-//    }
-    
     // Init Reference ID list
     for (VertexInfo &vi : m_vertexinfo) { vi.tstart = 0; vi.tcount = 0; }
     
-//    loopi(0,vertices.size())
-//    {
-//        vertices[i].tstart=0;
-//        vertices[i].tcount=0;
-//    }
-    
-    
     for (FaceInfo &fi : m_faceinfo)
-        for (size_t vidx : triangle(fi)) m_vertexinfo[vidx].tcount++;
-    
-//    loopi(0,triangles.size())
-//    {
-//        Triangle &t=triangles[i];
-//        loopj(0,3) vertices[t.v[j]].tcount++;
-//    }
+        for (size_t vidx : triangle(fi))
+            m_vertexinfo[vidx].tcount++;
     
     int tstart = 0;
     for (VertexInfo &vi : m_vertexinfo) {
@@ -448,15 +405,6 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
         tstart += vi.tcount;
         vi.tcount = 0;
     }
-
-//    int tstart=0;
-//    loopi(0,vertices.size())
-//    {
-//        Vertex &v=vertices[i];
-//        v.tstart=tstart;
-//        tstart+=v.tcount;
-//        v.tcount=0;
-//    }
     
     // Write References
     m_refs.resize(m_faceinfo.size() * 3);
@@ -472,58 +420,42 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
         }
     }
     
-//    // Write References
-//    refs.resize(triangles.size()*3);
-//    loopi(0,triangles.size())
-//    {
-//        Triangle &t=triangles[i];
-//        loopj(0,3)
-//        {
-//            Vertex &v=vertices[t.v[j]];
-//            refs[v.tstart+v.tcount].tid=i;
-//            refs[v.tstart+v.tcount].tvertex=j;
-//            v.tcount++;
-//        }
-//    }
-    
-//    // Identify boundary : vertices[].border=0,1
-//    if( iteration == 0 )
-//    {
-//        std::vector<int> vcount,vids;
+    // Identify boundary : vertices[].border=0,1
+    if (iteration == 0) {
+        for (VertexInfo &vi: m_vertexinfo) vi.border = false;
         
-//        loopi(0,vertices.size())
-//                vertices[i].border=0;
+        std::vector<size_t> vcount, vids;
         
-//        loopi(0,vertices.size())
-//        {
-//            Vertex &v=vertices[i];
-//            vcount.clear();
-//            vids.clear();
-//            loopj(0,v.tcount)
-//            {
-//                int k=refs[v.tstart+j].tid;
-//                Triangle &t=triangles[k];
-//                loopk(0,3)
-//                {
-//                    int ofs=0,id=t.v[k];
-//                    while(ofs<vcount.size())
-//                    {
-//                        if(vids[ofs]==id)break;
-//                        ofs++;
-//                    }
-//                    if(ofs==vcount.size())
-//                    {
-//                        vcount.push_back(1);
-//                        vids.push_back(id);
-//                    }
-//                    else
-//                        vcount[ofs]++;
-//                }
-//            }
-//            loopj(0,vcount.size()) if(vcount[j]==1)
-//                    vertices[vids[j]].border=1;
-//        }
-//    }
+        for (VertexInfo &vi: m_vertexinfo) {
+            vcount.clear();
+            vids.clear();
+            
+            for(size_t j = 0; j < vi.tcount; ++j) {
+                int k = m_refs[vi.tstart + k].face;
+                FaceInfo &fi = m_faceinfo[k];
+                std::array<size_t, 3> t = triangle(fi);
+                
+                for (size_t fid : t) {
+                    size_t ofs=0;
+                    while (ofs < vcount.size())
+                    {
+                        if (vids[ofs] == fid) break;
+                        ofs++;
+                    }
+                    if (ofs == vcount.size())
+                    {
+                        vcount.emplace_back(1);
+                        vids.emplace_back(fid);
+                    }
+                    else
+                        vcount[ofs]++;
+                }
+            }
+            
+            for (size_t j = 0; j < vcount.size(); ++j)
+                if(vcount[j] == 1) m_vertexinfo[vids[j]].border = true;
+        }
+    }
 }
 
 } // namespace implementation
